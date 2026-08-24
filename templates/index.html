@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>주식의 세계 - 실시간 포트폴리오 대시보드</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>">
+  
+  <!-- Pretendard 폰트 -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- PapaParse CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Pretendard Variable"', 'Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            stock: {
+              up: '#ef4444',
+              down: '#3b82f6',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: "Pretendard Variable", Pretendard, sans-serif; }
+    .text-stock-up { color: #ef4444 !important; }
+    .text-stock-down { color: #3b82f6 !important; }
+    .bg-stock-up-badge { background-color: rgba(239, 68, 68, 0.12); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.25); }
+    .bg-stock-down-badge { background-color: rgba(59, 130, 246, 0.12); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.25); }
+    .bg-stock-even-badge { background-color: rgba(148, 163, 184, 0.12); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-amber-400 selection:text-slate-950">
+
+  <!-- 1. 헤더 네비게이션 -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-lg shadow-amber-500/20 text-slate-950 font-black text-xl">
+          📈
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-black tracking-tight text-white">주식의 세계</h1>
+          <p class="text-[11px] text-slate-400 hidden sm:block">실시간 시세 기반 수익률 및 손익금액 대시보드</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- CSV 관리 버튼 -->
+        <button onclick="openCsvModal()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-200 bg-slate-800 hover:bg-slate-700 border border-slate-700 transition-colors">
+          <i data-lucide="file-text" class="w-3.5 h-3.5 text-slate-300"></i>
+          <span>CSV 관리</span>
+        </button>
+
+        <!-- 종목 추가 버튼 -->
+        <button onclick="openStockModal()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 transition-all shadow-md shadow-amber-400/10">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+          <span>종목 추가</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 2. 메인 컨텐츠 영역 -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+    <!-- 상태 컨트롤 바 -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 bg-slate-900/50 p-3.5 rounded-xl border border-slate-800">
+      <div class="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-400">
+        <div class="flex items-center gap-1.5">
+          <i data-lucide="clock" class="w-4 h-4 text-slate-500"></i>
+          <span>마지막 갱신:</span>
+          <span id="lastUpdatedText" class="font-mono text-slate-200 font-medium">가져오는 중...</span>
+        </div>
+
+        <!-- 실시간 환율 뱃지 -->
+        <div id="exchangeRateBadge" class="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[11px] font-mono">
+          <span class="text-amber-400 font-semibold">USD/KRW:</span>
+          <span id="rateText">1,380.00원</span>
+        </div>
+
+        <span id="loadingIndicator" class="hidden inline-flex items-center gap-1 text-[11px] text-amber-400 ml-1 animate-pulse">
+          <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+          구글 파이낸스 시세 수신 중...
+        </span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2 cursor-pointer text-xs text-slate-400 hover:text-slate-200">
+          <input type="checkbox" id="autoRefreshToggle" onchange="toggleAutoRefresh(this.checked)" class="w-3.5 h-3.5 accent-amber-400 rounded bg-slate-800 border-slate-700">
+          <span>1분 자동 갱신</span>
+        </label>
+
+        <!-- 리프레시 버튼 (요구사항) -->
+        <button id="refreshBtn" onclick="loadStockData()" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white transition-all hover:border-amber-400/50">
+          <i data-lucide="refresh-cw" id="refreshIcon" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>새로고침 (Refresh)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. 통계 요약 카드 5개 (합계, 평균 수익률 등) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6" id="summaryContainer">
+      <!-- 1. 총 매수금액 -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <span>총 매수금액 (원금)</span>
+          <i data-lucide="layers" class="w-4 h-4 text-slate-500"></i>
+        </div>
+        <div id="sumTotalBuy" class="text-xl sm:text-2xl font-bold text-white tracking-tight">0원</div>
+        <div class="text-xs text-slate-400 mt-2">보유 종목수: <span id="sumTotalCount" class="font-semibold text-slate-200">0개</span></div>
+      </div>
+
+      <!-- 2. 총 평가금액 -->
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-sm">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <span>총 평가금액</span>
+          <i data-lucide="dollar-sign" class="w-4 h-4 text-slate-500"></i>
+        </div>
+        <div id="sumTotalCurrent" class="text-xl sm:text-2xl font-bold text-white tracking-tight">0원</div>
+        <div class="text-xs text-slate-400 mt-2">평가 손익: <span id="sumTotalDiff" class="font-semibold text-slate-200">0원</span></div>
+      </div>
+
+      <!-- 3. 손익금액 합계 (요구사항) -->
+      <div id="cardProfitLoss" class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-sm transition-all">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <span class="font-bold text-slate-300">손익금액 합계</span>
+          <i data-lucide="trending-up" id="iconProfitLoss" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <div id="sumTotalProfitLoss" class="text-xl sm:text-2xl font-black tracking-tight text-slate-200">0원</div>
+        <div class="mt-2">
+          <span id="badgeProfitLossStatus" class="text-[11px] px-2 py-0.5 rounded-full font-medium inline-block bg-slate-800 text-slate-400">계산 중</span>
+        </div>
+      </div>
+
+      <!-- 4. 전체 수익률 (%) -->
+      <div id="cardOverallRate" class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-sm transition-all">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <span class="font-bold text-slate-300">전체 누적 수익률</span>
+          <i data-lucide="pie-chart" class="w-4 h-4 text-slate-500"></i>
+        </div>
+        <div id="sumOverallRate" class="text-xl sm:text-2xl font-black tracking-tight text-slate-200">0.00%</div>
+        <div class="text-xs text-slate-400 mt-2">총 원금 대비 수익률</div>
+      </div>
+
+      <!-- 5. 평균 수익률 (%) (요구사항) -->
+      <div id="cardAverageRate" class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-lg backdrop-blur-sm transition-all">
+        <div class="flex items-center justify-between text-slate-400 text-xs font-medium mb-1">
+          <span class="font-bold text-slate-300">평균 수익률</span>
+          <i data-lucide="percent" class="w-4 h-4 text-slate-500"></i>
+        </div>
+        <div id="sumAverageRate" class="text-xl sm:text-2xl font-black tracking-tight text-slate-200">0.00%</div>
+        <div class="text-xs text-slate-400 mt-2">종목별 단순 산술 평균</div>
+      </div>
+    </div>
+
+    <!-- 4. 주식 포트폴리오 목록 -->
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-base font-bold text-white flex items-center gap-2">
+          <span>보유 종목 리스트</span>
+          <span id="stockCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">0</span>
+        </h2>
+      </div>
+
+      <!-- 데스크탑 테이블 뷰 -->
+      <div class="hidden md:block bg-slate-900/80 border border-slate-800 rounded-xl shadow-xl overflow-hidden backdrop-blur-sm">
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-950/80 border-b border-slate-800 text-xs font-semibold text-slate-400 tracking-wider">
+                <th class="py-3.5 px-4 text-center w-24">MARKET</th>
+                <th class="py-3.5 px-4">종목명 / 심볼</th>
+                <th class="py-3.5 px-4 text-right">매수가</th>
+                <th class="py-3.5 px-4 text-right">현재가 (구글 파이낸스)</th>
+                <th class="py-3.5 px-4 text-right">보유수량</th>
+                <th class="py-3.5 px-4 text-right">매수총액(원화)</th>
+                <th class="py-3.5 px-4 text-right">평가총액(원화)</th>
+                <th class="py-3.5 px-4 text-right">손익금액(원화)</th>
+                <th class="py-3.5 px-4 text-right">수익률</th>
+                <th class="py-3.5 px-4 text-center w-24">관리</th>
+              </tr>
+            </thead>
+            <tbody id="stockTableBody" class="divide-y divide-slate-800/60 text-sm">
+              <!-- JS로 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 모바일 카드 뷰 -->
+      <div id="stockMobileContainer" class="md:hidden space-y-3.5">
+        <!-- JS로 동적 렌더링 -->
+      </div>
+    </div>
+  </main>
+
+  <!-- 5. 푸터 -->
+  <footer class="border-t border-slate-900 bg-slate-950 py-6 text-center text-xs text-slate-500 mt-12">
+    <div class="max-w-7xl mx-auto px-4 space-y-2">
+      <p>© 2026 주식의 세계 (WorldStock) · 구글 파이낸스(Google Finance) 실시간 시세 연동</p>
+      <p class="text-[11px] text-slate-600">
+        미국 주식은 실시간 USD/KRW 환율을 적용하여 원화로 자동 환산 계산됩니다.
+      </p>
+    </div>
+  </footer>
+
+  <!-- 6. 모달: 종목 추가 / 수정 -->
+  <div id="stockModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <h3 id="stockModalTitle" class="text-lg font-bold text-white">새 보유 종목 추가</h3>
+        <button onclick="closeStockModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <form id="stockForm" onsubmit="handleStockFormSubmit(event)" class="p-6 space-y-4">
+        <input type="hidden" id="formStockId">
+        
+        <!-- 시장 선택 -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">시장 구분 (MARKET)</label>
+          <div class="grid grid-cols-4 gap-2">
+            <button type="button" onclick="selectMarket('KOSPI')" id="btnMarketKOSPI" class="py-2 text-xs font-bold rounded-lg border bg-amber-500/20 border-amber-500 text-amber-400">KOSPI</button>
+            <button type="button" onclick="selectMarket('KOSDAQ')" id="btnMarketKOSDAQ" class="py-2 text-xs font-bold rounded-lg border bg-slate-900 border-slate-700 text-slate-400">KOSDAQ</button>
+            <button type="button" onclick="selectMarket('NASDAQ')" id="btnMarketNASDAQ" class="py-2 text-xs font-bold rounded-lg border bg-slate-900 border-slate-700 text-slate-400">NASDAQ</button>
+            <button type="button" onclick="selectMarket('NYSE')" id="btnMarketNYSE" class="py-2 text-xs font-bold rounded-lg border bg-slate-900 border-slate-700 text-slate-400">NYSE</button>
+          </div>
+          <input type="hidden" id="formMarket" value="KOSPI">
+        </div>
+
+        <!-- 종목명 & 자동완성 검색 -->
+        <div class="relative">
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">종목명 / 티커 <span class="text-red-400">*</span></label>
+          <div class="relative">
+            <input type="text" id="formName" oninput="handleStockSearch(this.value)" placeholder="예: 삼성전자, 애플, NVDA, TSLA" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" required autocomplete="off">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute right-3 top-3"></i>
+          </div>
+          <div id="searchResultsDropdown" class="hidden absolute left-0 right-0 top-full mt-1 bg-slate-950 border border-slate-700 rounded-lg shadow-xl max-h-48 overflow-y-auto z-20"></div>
+        </div>
+
+        <!-- 종목코드/티커 -->
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">종목코드 / 티커 (예: 005930, AAPL, NVDA)</label>
+          <input type="text" id="formCode" placeholder="예: 005930 또는 AAPL" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm font-mono text-white placeholder-slate-500 focus:outline-none focus:border-amber-500">
+        </div>
+
+        <!-- 매수가 & 수량 -->
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">매수가 (원 또는 $) <span class="text-red-400">*</span></label>
+            <input type="number" id="formBuyPrice" placeholder="한국: 72000 / 미국: 195.5" min="0" step="any" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" required>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">보유 수량 (주) <span class="text-red-400">*</span></label>
+            <input type="number" id="formQuantity" placeholder="예: 50" min="0" step="any" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500" required>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+          <button type="button" onclick="closeStockModal()" class="px-4 py-2 text-xs font-medium text-slate-300 hover:text-white bg-slate-800 rounded-lg">취소</button>
+          <button type="submit" class="px-5 py-2 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg shadow flex items-center gap-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>저장하기</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 7. 모달: CSV 관리 -->
+  <div id="csvModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/60">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i data-lucide="file-text" class="w-5 h-5 text-amber-400"></i>
+          <span>CSV 포트폴리오 관리</span>
+        </h3>
+        <button onclick="closeCsvModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="flex border-b border-slate-800 bg-slate-950/40 text-xs font-semibold">
+        <button onclick="switchCsvTab('upload')" id="tabCsvUpload" class="flex-1 py-3 text-center border-b-2 border-amber-400 text-amber-400 bg-slate-800/40">파일 업로드 / 다운로드</button>
+        <button onclick="switchCsvTab('editor')" id="tabCsvEditor" class="flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200">직접 CSV 편집</button>
+      </div>
+
+      <div id="csvUploadSection" class="p-6 space-y-5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-2">CSV 파일 불러오기 (.csv)</label>
+          <label class="border-2 border-dashed border-slate-700 hover:border-amber-400 bg-slate-950/60 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition-all">
+            <i data-lucide="upload" class="w-8 h-8 text-slate-400 mb-2"></i>
+            <span class="text-sm font-medium text-slate-200">클릭하여 CSV 파일 선택</span>
+            <span class="text-xs text-slate-500 mt-1">포맷: MARKET, 종목명, 종목코드, 매수가, 수량</span>
+            <input type="file" accept=".csv" onchange="handleCsvFileUpload(event)" class="hidden">
+          </label>
+        </div>
+        <div class="pt-2 border-t border-slate-800 flex items-center justify-between">
+          <span class="text-xs text-slate-400">현재 포트폴리오 파일로 내보내기</span>
+          <a href="/api/download-csv" class="px-4 py-2 text-xs font-semibold text-slate-200 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors inline-flex items-center gap-1.5">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>CSV 파일 다운로드</span>
+          </a>
+        </div>
+      </div>
+
+      <div id="csvEditorSection" class="hidden p-6 space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">CSV 텍스트 직접 수정</label>
+          <textarea id="csvEditorTextarea" rows="8" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-xs font-mono text-slate-200 focus:outline-none focus:border-amber-500 leading-relaxed"></textarea>
+        </div>
+        <div class="flex items-center justify-end gap-3">
+          <button type="button" onclick="closeCsvModal()" class="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white bg-slate-800 rounded-lg">닫기</button>
+          <button onclick="handleSaveCsvText()" class="px-5 py-2 text-xs font-bold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded-lg shadow flex items-center gap-1.5">
+            <i data-lucide="check" class="w-4 h-4"></i>
+            <span>적용 및 저장</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript 애플리케이션 로직 -->
+  <script>
+    let currentStocks = [];
+    let autoRefreshTimer = null;
+    let currentUsdKrwRate = 1380.0;
+
+    // 포맷터 함수들
+    function formatNumber(num) {
+      if (num === null || num === undefined || isNaN(num)) return '0';
+      return Math.round(num).toLocaleString('ko-KR');
+    }
+
+    function formatCurrency(num) {
+      return formatNumber(num) + '원';
+    }
+
+    function formatUsd(num) {
+      if (num === null || num === undefined || isNaN(num)) return '$0.00';
+      return '$' + Number(num).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatPercent(rate) {
+      if (rate === null || rate === undefined || isNaN(rate)) return '0.00%';
+      const sign = rate > 0 ? '+' : '';
+      return `${sign}${Number(rate).toFixed(2)}%`;
+    }
+
+    function getStockColorClass(val) {
+      if (val > 0) return 'text-stock-up font-bold';
+      if (val < 0) return 'text-stock-down font-bold';
+      return 'text-slate-400 font-medium';
+    }
+
+    function getStockBadgeClass(val) {
+      if (val > 0) return 'bg-stock-up-badge';
+      if (val < 0) return 'bg-stock-down-badge';
+      return 'bg-stock-even-badge';
+    }
+
+    // 데이터 불러오기 (구글 파이낸스 시세 연동)
+    async function loadStockData(silent = false) {
+      const refreshIcon = document.getElementById('refreshIcon');
+      const loadingIndicator = document.getElementById('loadingIndicator');
+      
+      if (!silent) {
+        refreshIcon.classList.add('animate-spin');
+        loadingIndicator.classList.remove('hidden');
+      }
+
+      try {
+        const res = await fetch('/api/stocks');
+        const data = await res.json();
+
+        if (data.success) {
+          currentStocks = data.stocks || [];
+          currentUsdKrwRate = data.usdKrwRate || 1380.0;
+          document.getElementById('rateText').innerText = formatNumber(currentUsdKrwRate) + '원';
+          renderSummary(data.summary || {});
+          renderStockList(currentStocks);
+          document.getElementById('lastUpdatedText').innerText = new Date().toLocaleTimeString('ko-KR');
+        }
+      } catch (err) {
+        console.error('시세 로드 실패:', err);
+      } finally {
+        refreshIcon.classList.remove('animate-spin');
+        loadingIndicator.classList.add('hidden');
+      }
+    }
+
+    // 상단 요약 통계 렌더링
+    function renderSummary(summary) {
+      const { totalStocks, totalBuyAmount, totalCurrentAmount, totalProfitLoss, overallReturnRate, averageReturnRate } = summary;
+
+      document.getElementById('sumTotalBuy').innerText = formatCurrency(totalBuyAmount);
+      document.getElementById('sumTotalCount').innerText = `${totalStocks}개`;
+      document.getElementById('stockCountBadge').innerText = `${totalStocks} 종목`;
+
+      document.getElementById('sumTotalCurrent').innerText = formatCurrency(totalCurrentAmount);
+      const diffElem = document.getElementById('sumTotalDiff');
+      diffElem.innerText = (totalProfitLoss > 0 ? '+' : '') + formatCurrency(totalProfitLoss);
+      diffElem.className = 'font-semibold ' + (totalProfitLoss > 0 ? 'text-red-400' : totalProfitLoss < 0 ? 'text-blue-400' : 'text-slate-200');
+
+      // 손익금액 합계
+      const profitLossElem = document.getElementById('sumTotalProfitLoss');
+      profitLossElem.innerText = (totalProfitLoss > 0 ? '+' : '') + formatCurrency(totalProfitLoss);
+      profitLossElem.className = 'text-xl sm:text-2xl font-black tracking-tight ' + getStockColorClass(totalProfitLoss);
+
+      const statusBadge = document.getElementById('badgeProfitLossStatus');
+      statusBadge.innerText = totalProfitLoss > 0 ? '수익 실현중' : totalProfitLoss < 0 ? '평가 손실중' : '원금 보합';
+      statusBadge.className = 'text-[11px] px-2 py-0.5 rounded-full font-medium inline-block ' + getStockBadgeClass(totalProfitLoss);
+
+      // 전체 수익률
+      const overallElem = document.getElementById('sumOverallRate');
+      overallElem.innerText = formatPercent(overallReturnRate);
+      overallElem.className = 'text-xl sm:text-2xl font-black tracking-tight ' + getStockColorClass(overallReturnRate);
+
+      // 평균 수익률
+      const avgElem = document.getElementById('sumAverageRate');
+      avgElem.innerText = formatPercent(averageReturnRate);
+      avgElem.className = 'text-xl sm:text-2xl font-black tracking-tight ' + getStockColorClass(averageReturnRate);
+    }
+
+    // 주식 목록 렌더링 (데스크탑 테이블 & 모바일 카드)
+    function renderStockList(stocks) {
+      const tableBody = document.getElementById('stockTableBody');
+      const mobileContainer = document.getElementById('stockMobileContainer');
+
+      if (!stocks || stocks.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="10" class="py-12 text-center text-slate-500">등록된 종목이 없습니다. "종목 추가"를 눌러보세요.</td></tr>`;
+        mobileContainer.innerHTML = `<div class="bg-slate-900/80 border border-slate-800 rounded-xl p-8 text-center text-slate-500">등록된 종목이 없습니다.</div>`;
+        return;
+      }
+
+      // 데스크탑 테이블 렌더링
+      tableBody.innerHTML = stocks.map(stock => {
+        const googleUrl = stock.googleUrl || `https://www.google.com/finance/quote/${stock.code}`;
+
+        const marketBadgeClass = stock.market === 'KOSPI' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+          : stock.market === 'KOSDAQ' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+          : stock.market === 'NASDAQ' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+          : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+
+        // 미국 주식 표기
+        let buyPriceDisplay = formatNumber(stock.buyPrice) + '원';
+        let currentPriceDisplay = formatNumber(stock.currentPrice) + '원';
+
+        if (stock.isUs) {
+          buyPriceDisplay = `
+            <div class="text-white font-medium">${formatUsd(stock.buyPrice)}</div>
+            <div class="text-[11px] text-slate-400 font-normal">₩${formatNumber(stock.buyPriceKrw)}</div>
+          `;
+          currentPriceDisplay = `
+            <div class="text-white font-bold">${formatUsd(stock.currentPrice)}</div>
+            <div class="text-[11px] text-slate-400 font-normal">₩${formatNumber(stock.currentPriceKrw)}</div>
+          `;
+        }
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition-colors group">
+            <td class="py-4 px-4 text-center">
+              <span class="inline-block px-2 py-0.5 text-xs font-bold rounded-md ${marketBadgeClass}">
+                ${stock.market}
+              </span>
+            </td>
+            <td class="py-4 px-4">
+              <div class="flex items-center gap-1.5">
+                <span class="font-semibold text-white group-hover:text-amber-400 transition-colors">${stock.name}</span>
+                <a href="${googleUrl}" target="_blank" class="text-slate-500 hover:text-amber-400 transition-colors inline-flex" title="구글 파이낸스 페이지">
+                  <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+                </a>
+              </div>
+              <div class="text-xs font-mono text-slate-400">${stock.code || '코드 미입력'}</div>
+            </td>
+            <td class="py-4 px-4 text-right font-medium text-slate-300">
+              ${buyPriceDisplay}
+            </td>
+            <td class="py-4 px-4 text-right font-semibold">
+              ${currentPriceDisplay}
+              ${stock.changePrice ? `
+                <div class="text-xs flex items-center justify-end gap-0.5 ${getStockColorClass(stock.changeRate)}">
+                  <span>${stock.changePrice > 0 ? '+' : ''}${stock.isUs ? formatUsd(stock.changePrice) : formatNumber(stock.changePrice) + '원'} (${stock.changeRate > 0 ? '+' : ''}${stock.changeRate}%)</span>
+                </div>
+              ` : ''}
+            </td>
+            <td class="py-4 px-4 text-right font-medium text-slate-300">${formatNumber(stock.quantity)}주</td>
+            <td class="py-4 px-4 text-right font-medium text-slate-400">${formatCurrency(stock.totalBuyAmount)}</td>
+            <td class="py-4 px-4 text-right font-semibold text-white">${formatCurrency(stock.totalCurrentAmount)}</td>
+            <td class="py-4 px-4 text-right ${getStockColorClass(stock.profitLoss)}">
+              ${stock.profitLoss > 0 ? '+' : ''}${formatCurrency(stock.profitLoss)}
+            </td>
+            <td class="py-4 px-4 text-right">
+              <span class="inline-block px-2.5 py-1 rounded-md text-xs font-extrabold ${getStockBadgeClass(stock.returnRate)}">
+                ${formatPercent(stock.returnRate)}
+              </span>
+            </td>
+            <td class="py-4 px-4 text-center">
+              <div class="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                <button onclick="editStock(${stock.id})" class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-md" title="수정">
+                  <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="deleteStock(${stock.id})" class="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-md" title="삭제">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      // 모바일 카드 뷰 렌더링
+      mobileContainer.innerHTML = stocks.map(stock => {
+        const googleUrl = stock.googleUrl || `https://www.google.com/finance/quote/${stock.code}`;
+
+        const marketBadgeClass = stock.market === 'KOSPI' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+          : stock.market === 'KOSDAQ' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+          : stock.market === 'NASDAQ' ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20'
+          : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+
+        const buyPriceStr = stock.isUs ? `${formatUsd(stock.buyPrice)} (₩${formatNumber(stock.buyPriceKrw)})` : `${formatNumber(stock.buyPrice)}원`;
+        const currPriceStr = stock.isUs ? `${formatUsd(stock.currentPrice)} (₩${formatNumber(stock.currentPriceKrw)})` : `${formatNumber(stock.currentPrice)}원`;
+
+        return `
+          <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-md backdrop-blur-sm">
+            <div class="flex items-start justify-between gap-2 mb-3">
+              <div>
+                <div class="flex items-center gap-1.5 mb-1">
+                  <span class="px-1.5 py-0.5 text-[10px] font-bold rounded ${marketBadgeClass}">${stock.market}</span>
+                  <a href="${googleUrl}" target="_blank" class="text-base font-bold text-white flex items-center gap-1 hover:text-amber-400">
+                    <span>${stock.name}</span>
+                    <i data-lucide="external-link" class="w-3.5 h-3.5 text-slate-400"></i>
+                  </a>
+                </div>
+                <div class="text-xs font-mono text-slate-400">코드/티커: ${stock.code || '-'}</div>
+              </div>
+              <div class="text-right">
+                <span class="inline-block px-2.5 py-1 rounded-md text-xs font-extrabold ${getStockBadgeClass(stock.returnRate)}">
+                  ${formatPercent(stock.returnRate)}
+                </span>
+                <div class="text-[11px] font-bold mt-1 ${getStockColorClass(stock.profitLoss)}">
+                  ${stock.profitLoss > 0 ? '+' : ''}${formatCurrency(stock.profitLoss)}
+                </div>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 bg-slate-950/70 rounded-lg p-2.5 text-xs mb-3 border border-slate-800/80">
+              <div>
+                <span class="text-slate-400 block text-[11px]">매수가 / 수량</span>
+                <span class="text-slate-200 font-medium">${buyPriceStr} (${stock.quantity}주)</span>
+              </div>
+              <div class="text-right">
+                <span class="text-slate-400 block text-[11px]">현재가 (구글)</span>
+                <span class="text-white font-bold">${currPriceStr}</span>
+              </div>
+              <div>
+                <span class="text-slate-400 block text-[11px]">총 매수금액 (원화)</span>
+                <span class="text-slate-300 font-medium">${formatCurrency(stock.totalBuyAmount)}</span>
+              </div>
+              <div class="text-right">
+                <span class="text-slate-400 block text-[11px]">총 평가금액 (원화)</span>
+                <span class="text-white font-bold">${formatCurrency(stock.totalCurrentAmount)}</span>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-1 border-t border-slate-800 text-xs">
+              <button onclick="editStock(${stock.id})" class="flex items-center gap-1 px-2.5 py-1 text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-md">
+                <i data-lucide="edit-2" class="w-3.5 h-3.5"></i>
+                <span>수정</span>
+              </button>
+              <button onclick="deleteStock(${stock.id})" class="flex items-center gap-1 px-2.5 py-1 text-red-400 bg-red-500/10 hover:bg-red-500/20 rounded-md">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>삭제</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    // 자동 새로고침 토글
+    function toggleAutoRefresh(enabled) {
+      if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+      if (enabled) {
+        autoRefreshTimer = setInterval(() => {
+          loadStockData(true);
+        }, 60000);
+      }
+    }
+
+    // 모달 제어 함수들
+    function openStockModal(stock = null) {
+      document.getElementById('stockModal').classList.remove('hidden');
+      document.getElementById('searchResultsDropdown').classList.add('hidden');
+
+      if (stock) {
+        document.getElementById('stockModalTitle').innerText = '종목 정보 수정';
+        document.getElementById('formStockId').value = stock.id;
+        document.getElementById('formName').value = stock.name;
+        document.getElementById('formCode').value = stock.code;
+        document.getElementById('formBuyPrice').value = stock.buyPrice;
+        document.getElementById('formQuantity').value = stock.quantity;
+        selectMarket(stock.market || 'KOSPI');
+      } else {
+        document.getElementById('stockModalTitle').innerText = '새 보유 종목 추가';
+        document.getElementById('formStockId').value = '';
+        document.getElementById('formName').value = '';
+        document.getElementById('formCode').value = '';
+        document.getElementById('formBuyPrice').value = '';
+        document.getElementById('formQuantity').value = '';
+        selectMarket('KOSPI');
+      }
+    }
+
+    function closeStockModal() {
+      document.getElementById('stockModal').classList.add('hidden');
+    }
+
+    function selectMarket(market) {
+      document.getElementById('formMarket').value = market;
+      ['KOSPI', 'KOSDAQ', 'NASDAQ', 'NYSE'].forEach(m => {
+        const btn = document.getElementById(`btnMarket${m}`);
+        if (btn) {
+          if (m === market) {
+            btn.className = 'py-2 text-xs font-bold rounded-lg border bg-amber-500/20 border-amber-500 text-amber-400';
+          } else {
+            btn.className = 'py-2 text-xs font-bold rounded-lg border bg-slate-950 border-slate-700 text-slate-400';
+          }
+        }
+      });
+    }
+
+    // 종목 검색
+    let searchDebounce = null;
+    async function handleStockSearch(query) {
+      clearTimeout(searchDebounce);
+      const dropdown = document.getElementById('searchResultsDropdown');
+      if (!query.trim()) {
+        dropdown.classList.add('hidden');
+        return;
+      }
+
+      searchDebounce = setTimeout(async () => {
+        try {
+          const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+          const items = await res.json();
+          if (items && items.length > 0) {
+            dropdown.innerHTML = items.map(item => `
+              <button type="button" onclick="selectSearchResult('${item.name}', '${item.code}', '${item.market}')" class="w-full text-left px-3.5 py-2 hover:bg-slate-800 flex items-center justify-between text-xs border-b border-slate-800 last:border-0">
+                <span class="font-semibold text-white">${item.name}</span>
+                <span class="font-mono text-slate-400">${item.code} (${item.market})</span>
+              </button>
+            `).join('');
+            dropdown.classList.remove('hidden');
+          } else {
+            dropdown.classList.add('hidden');
+          }
+        } catch (e) {
+          dropdown.classList.add('hidden');
+        }
+      }, 200);
+    }
+
+    function selectSearchResult(name, code, market) {
+      document.getElementById('formName').value = name;
+      document.getElementById('formCode').value = code;
+      selectMarket(market || 'KOSPI');
+      document.getElementById('searchResultsDropdown').classList.add('hidden');
+    }
+
+    async function handleStockFormSubmit(e) {
+      e.preventDefault();
+      const id = document.getElementById('formStockId').value;
+      const market = document.getElementById('formMarket').value;
+      const name = document.getElementById('formName').value.trim();
+      const code = document.getElementById('formCode').value.trim().toUpperCase();
+      const buyPrice = parseFloat(document.getElementById('formBuyPrice').value);
+      const quantity = parseFloat(document.getElementById('formQuantity').value);
+
+      let updatedStocks;
+      if (id) {
+        updatedStocks = currentStocks.map(s => String(s.id) === String(id) ? { ...s, market, name, code, buyPrice, quantity } : s);
+      } else {
+        updatedStocks = [...currentStocks, { id: Date.now(), market, name, code, buyPrice, quantity }];
+      }
+
+      try {
+        await fetch('/api/stocks/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stocks: updatedStocks })
+        });
+        closeStockModal();
+        loadStockData();
+      } catch (err) {
+        alert('저장 실패: ' + err.message);
+      }
+    }
+
+    function editStock(id) {
+      const target = currentStocks.find(s => s.id === id);
+      if (target) openStockModal(target);
+    }
+
+    async function deleteStock(id) {
+      if (!confirm('해당 종목을 포트폴리오에서 삭제하시겠습니까?')) return;
+      const updated = currentStocks.filter(s => s.id !== id);
+      try {
+        await fetch('/api/stocks/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stocks: updated })
+        });
+        loadStockData();
+      } catch (err) {
+        alert('삭제 실패');
+      }
+    }
+
+    // CSV 모달 관리
+    function openCsvModal() {
+      document.getElementById('csvModal').classList.remove('hidden');
+      switchCsvTab('upload');
+    }
+
+    function closeCsvModal() {
+      document.getElementById('csvModal').classList.add('hidden');
+    }
+
+    function switchCsvTab(tab) {
+      const uploadSec = document.getElementById('csvUploadSection');
+      const editorSec = document.getElementById('csvEditorSection');
+      const tabUpload = document.getElementById('tabCsvUpload');
+      const tabEditor = document.getElementById('tabCsvEditor');
+
+      if (tab === 'upload') {
+        uploadSec.classList.remove('hidden');
+        editorSec.classList.add('hidden');
+        tabUpload.className = 'flex-1 py-3 text-center border-b-2 border-amber-400 text-amber-400 bg-slate-800/40';
+        tabEditor.className = 'flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+      } else {
+        uploadSec.classList.add('hidden');
+        editorSec.classList.remove('hidden');
+        tabEditor.className = 'flex-1 py-3 text-center border-b-2 border-amber-400 text-amber-400 bg-slate-800/40';
+        tabUpload.className = 'flex-1 py-3 text-center border-b-2 border-transparent text-slate-400 hover:text-slate-200';
+
+        const rows = currentStocks.map(s => ({
+          MARKET: s.market,
+          '종목명': s.name,
+          '종목코드': s.code,
+          '매수가': s.buyPrice,
+          '수량': s.quantity
+        }));
+        document.getElementById('csvEditorTextarea').value = Papa.unparse(rows);
+      }
+    }
+
+    function handleCsvFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+          const rawCsv = Papa.unparse(results.data);
+          await fetch('/api/stocks/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rawCsv })
+          });
+          closeCsvModal();
+          loadStockData();
+        }
+      });
+    }
+
+    async function handleSaveCsvText() {
+      const rawCsv = document.getElementById('csvEditorTextarea').value;
+      await fetch('/api/stocks/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawCsv })
+      });
+      closeCsvModal();
+      loadStockData();
+    }
+
+    // 페이지 로드 시 초기 실행
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadStockData();
+    });
+  </script>
+</body>
+</html>

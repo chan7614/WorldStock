@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-900 text-slate-100 antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* 한국 증시 테마 커스텀 클래스 */
+.text-stock-up {
+  color: #ef4444 !important;
+}
+
+.text-stock-down {
+  color: #3b82f6 !important;
+}
+
+.bg-stock-up-light {
+  background-color: rgba(239, 68, 68, 0.12);
+}
+
+.bg-stock-down-light {
+  background-color: rgba(59, 130, 246, 0.12);
+}
+
+.border-stock-up {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+.border-stock-down {
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+/* 부드러운 전환 효과 */
+.transition-smooth {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 커스텀 스크롤바 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
